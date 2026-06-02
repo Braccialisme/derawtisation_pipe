@@ -13,7 +13,6 @@ Output: runs/YYYYMMDD_HHMMSS/exif_audit.csv
 
 import csv
 import json
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -36,15 +35,31 @@ def detect_group(filename: str, groups: dict) -> str:
     return "unknown"
 
 
-def flag_anomalies(row: dict, config: dict) -> list[str]:
+def flag_anomalies(row: dict, config: dict) -> list:
     """Return a list of anomaly flags for a given EXIF row."""
     flags = []
-    flash = str(row.get("FlashMode", "")).lower()
-    if "did not fire" in flash:
+    flash = str(row.get("flash_mode", ""))
+    # EXIF Flash field is an integer bitmask — bit 0 = fired (1) or not fired (0).
+    # Any even number means flash did not fire.
+    # e.g. 24 = "Auto, did not fire", 9 = "Fired", 13 = "Fired, external"
+    try:
+        flash_int = int(float(flash)) if flash else -1
+    except ValueError:
+        flash_int = -1
+    if flash_int >= 0 and (flash_int & 1) == 0:
         flags.append("NO_FLASH")
     if row.get("group") == "unknown":
         flags.append("UNKNOWN_GROUP")
     return flags
+
+
+def get_tag(meta: dict, *keys) -> str:
+    """Try multiple tag name variants — exiftool names vary by file format."""
+    for k in keys:
+        v = meta.get(k)
+        if v is not None:
+            return str(v)
+    return ""
 
 
 def run():
@@ -61,7 +76,7 @@ def run():
     with open(run_dir / "run_info.json", "w") as f:
         json.dump({"run_id": run_id, "input_dir": str(input_dir), "step": "01_exif_audit"}, f, indent=2)
 
-    # Collect all RAW files
+    # Collect RAW files only (not JPGs)
     raw_files = sorted(
         list(input_dir.glob("*.NEF")) +
         list(input_dir.glob("*.nef")) +
@@ -73,16 +88,18 @@ def run():
         print(f"[ERROR] No RAW files found in {input_dir}")
         sys.exit(1)
 
-    print(f"[01] Found {len(raw_files)} RAW files in {input_dir}")
+    print(f"[01] Scanning {len(raw_files)} RAW files in {input_dir}")
 
-    # Extract EXIF with exiftool
     tags = [
-        "FileName", "Model", "LensInfo", "FocalLength",
-        "ISO", "ExposureTime", "FNumber",
-        "WhiteBalance", "ColorSpace", "FlashMode", "CreateDate"
+        "FileName", "Model", "FocalLength",
+        "ISO", "ISOSpeedRatings", "ExposureTime",
+        "FNumber", "WhiteBalance", "Flash", "FlashMode",
+        "CreateDate", "DateTimeOriginal"
     ]
 
     rows = []
+    seen = set()  # deduplicate — exiftool sometimes returns multiple blocks per file
+
     with exiftool.ExifToolHelper() as et:
         metadata = et.get_tags([str(f) for f in raw_files], tags=tags)
 
@@ -90,20 +107,29 @@ def run():
 
     for meta in metadata:
         filename = Path(meta.get("File:FileName", "")).name
+
+        # Skip duplicate entries for the same filename
+        if filename in seen:
+            continue
+        seen.add(filename)
+
         group = detect_group(filename, groups)
+
         row = {
             "filename":      filename,
             "group":         group,
             "camera":        groups.get(group, {}).get("camera", "unknown"),
             "card":          groups.get(group, {}).get("card", "unknown"),
-            "model":         meta.get("EXIF:Model", ""),
-            "focal_length":  meta.get("EXIF:FocalLength", ""),
-            "iso":           meta.get("EXIF:ISO", ""),
-            "exposure_time": meta.get("EXIF:ExposureTime", ""),
-            "fnumber":       meta.get("EXIF:FNumber", ""),
-            "white_balance": meta.get("EXIF:WhiteBalance", ""),
-            "flash_mode":    meta.get("EXIF:FlashMode", ""),
-            "create_date":   meta.get("EXIF:CreateDate", ""),
+            "model":         get_tag(meta, "EXIF:Model"),
+            "focal_length":  get_tag(meta, "EXIF:FocalLength"),
+            "iso":           get_tag(meta, "EXIF:ISO", "EXIF:ISOSpeedRatings"),
+            "exposure_time": get_tag(meta, "EXIF:ExposureTime"),
+            "fnumber":       get_tag(meta, "EXIF:FNumber"),
+            "white_balance": get_tag(meta, "EXIF:WhiteBalance"),
+            # Flash tag is a bitmask integer in most RAW formats
+            # bit 0 = fired (1) or not fired (0)
+            "flash_mode":    get_tag(meta, "EXIF:Flash", "EXIF:FlashMode"),
+            "create_date":   get_tag(meta, "EXIF:DateTimeOriginal", "EXIF:CreateDate"),
         }
         row["anomalies"] = "|".join(flag_anomalies(row, config))
         rows.append(row)
@@ -122,13 +148,13 @@ def run():
     # Summary
     total = len(rows)
     no_flash = sum(1 for r in rows if "NO_FLASH" in r["anomalies"])
-    unknown = sum(1 for r in rows if "UNKNOWN_GROUP" in r["anomalies"])
+    unknown  = sum(1 for r in rows if "UNKNOWN_GROUP" in r["anomalies"])
     by_group = {}
     for r in rows:
         by_group[r["group"]] = by_group.get(r["group"], 0) + 1
 
     print(f"[01] Audit complete → {out_path}")
-    print(f"[01] Total files : {total}")
+    print(f"[01] Total files : {total} (deduplicated)")
     print(f"[01] By group    : {by_group}")
     print(f"[01] No-flash    : {no_flash} frames flagged")
     print(f"[01] Unknown grp : {unknown} frames flagged")
