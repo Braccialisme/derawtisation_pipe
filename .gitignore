@@ -1,10 +1,44 @@
-# Python-generated files
+# Python
 __pycache__/
-*.py[oc]
-build/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
 dist/
-wheels/
-*.egg-info
+build/
 
-# Virtual environments
-.venv
+# uv
+.uv/
+
+# Pipeline outputs — stay on the NAS, not in git
+runs/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# RAW and image files — never commit these
+*.NEF
+*.DNG
+*.nef
+*.dng
+*.JPG
+*.jpg
+*.TIFF
+*.tiff
+*.TIF
+*.tif
+
+# Secrets / local config overrides
+.env
+local_config.yaml

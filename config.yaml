@@ -1,0 +1,87 @@
+# derawtisation_pipe — configuration
+# ─────────────────────────────────────
+# All tunable parameters live here. No need to touch the pipeline scripts
+# to change thresholds, paths, or output settings.
+# Lines starting with # are comments explaining why a value exists.
+
+
+# ── PATHS ────────────────────────────────────────────────────────────────────
+
+# Folder containing the RAW files to process (NEF and DNG)
+# Can be a local path or a mapped network drive path (e.g. H:\...)
+input_dir: "C:/Users/iconem/Desktop/mpr_sample"
+
+# Where pipeline outputs (CSVs, correction matrices, exported JPEGs) will go
+# A timestamped subfolder is created automatically inside this folder per run
+output_dir: "C:/Users/iconem/Desktop/mpr_output"
+
+# Path to RawTherapee CLI executable
+# On Windows this is typically in Program Files
+rawtherapee_cli: "C:/Program Files/RawTherapee/rawtherapee-cli.exe"
+
+
+# ── CAMERA GROUPS ────────────────────────────────────────────────────────────
+
+# Maps filename prefix to a group identifier used throughout the pipeline.
+# Group is the unit for computing color correction matrices.
+# See DECISIONS.md D003 for why we group per card rather than per camera model.
+camera_groups:
+  N02:  { camera: "Nikon D850",  card: "146ND850",  flash: "godox_external" }
+  R004: { camera: "Ricoh GR II", card: "100_0512",  flash: "ricoh_native" }
+  R100: { camera: "Ricoh GR II", card: "104RICOH",  flash: "ricoh_native" }
+  R105: { camera: "Ricoh GR II", card: "111RICOH",  flash: "ricoh_native" }
+
+# The reference group — all other groups are normalized to match this one.
+# See DECISIONS.md D004 for why Nikon is the reference.
+reference_group: "N02"
+
+
+# ── BLUR CULLING ─────────────────────────────────────────────────────────────
+
+# Laplacian variance threshold below which a frame is considered blurry.
+# Higher value = stricter (rejects more). Lower value = more permissive.
+# Calibrated on the mpr_sample: value of 80 rejects visibly soft frames
+# without being overly aggressive. Adjust if too many good frames are lost.
+blur_threshold: 80
+
+# A frame is also rejected if flash did not fire (FlashMode contains "Did not fire")
+# regardless of sharpness score. See DECISIONS.md D005.
+reject_no_flash: true
+
+
+# ── COLORCHECKER DETECTION ───────────────────────────────────────────────────
+
+# Minimum confidence score from colour-checker-detection to accept a detection.
+# Range 0.0–1.0. Below this value the detection is discarded for that frame.
+checker_confidence_min: 0.85
+
+# The ColorChecker reference — which chart standard to compare against.
+# "Classic" = original 24-patch Macbeth ColorChecker
+checker_reference: "Classic"
+
+# Color space used as the common target for normalization.
+# "sRGB" is correct for JPEG output going into photogrammetry software.
+target_colorspace: "sRGB"
+
+
+# ── RAW EXPORT ───────────────────────────────────────────────────────────────
+
+# JPEG quality for exported files. 95 is the standard for photogrammetry input.
+# Going above 95 produces diminishing returns at significant file size cost.
+jpeg_quality: 95
+
+# Output color profile embedded in exported JPEGs.
+output_profile: "sRGB"
+
+# Whether to also export a full-resolution TIFF alongside the JPEG.
+# Disabled by default — JPEGs are sufficient for RealityCapture/Metashape.
+# See DECISIONS.md D007.
+export_tiff: false
+
+
+# ── QC REPORT ────────────────────────────────────────────────────────────────
+
+# A frame is flagged as an outlier in the QC report if its mean luminance
+# deviates from the group median by more than this factor.
+# e.g. 0.3 means flag if luminance is 30% above or below group median.
+qc_luminance_tolerance: 0.3
