@@ -68,4 +68,10 @@ This file records every significant technical choice made in building this pipel
 
 ---
 
+## D009 — Per-group blur thresholds
+
+**Date:** 2026-06  
+**Decision:** Use separate Laplacian variance thresholds per camera group rather than one global value.  
+**Reason:** The Nikon D850 (45MP) produces much larger half-size decoded images than the Ricoh GR II. Laplacian variance is diluted across more pixels, producing systematically lower scores for the same perceived sharpness. A single threshold of 80 would reject most valid Nikon frames. Thresholds were calibrated empirically on mpr_sample2.
+
 *Add new entries below as decisions are made. Format: D00N — short title, date, decision, reason.*

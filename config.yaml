@@ -9,11 +9,11 @@
 
 # Folder containing the RAW files to process (NEF and DNG)
 # Can be a local path or a mapped network drive path (e.g. H:\...)
-input_dir: "C:/Users/iconem/Desktop/mpr_sample"
+input_dir: "C:/Users/iconem/Desktop/mpr_sample2"
 
 # Where pipeline outputs (CSVs, correction matrices, exported JPEGs) will go
 # A timestamped subfolder is created automatically inside this folder per run
-output_dir: "C:/Users/iconem/Desktop/mpr_output"
+output_dir: "C:/Users/iconem/Desktop/mpr_output2"
 
 # Path to RawTherapee CLI executable
 # On Windows this is typically in Program Files
@@ -38,11 +38,21 @@ reference_group: "N02"
 
 # ── BLUR CULLING ─────────────────────────────────────────────────────────────
 
-# Laplacian variance threshold below which a frame is considered blurry.
-# Higher value = stricter (rejects more). Lower value = more permissive.
-# Calibrated on the mpr_sample: value of 80 rejects visibly soft frames
-# without being overly aggressive. Adjust if too many good frames are lost.
-blur_threshold: 80
+# Sharpness thresholds per camera group (Laplacian variance).
+# Nikon D850 scores lower than Ricoh due to higher pixel density on half-size
+# decode — thresholds are not comparable across sensors. See DECISIONS.md D009.
+blur_thresholds:
+  N02:  55
+  R004: 80
+  R100: 80
+  R105: 80
+blur_threshold_default: 80
+reject_no_flash: true
+
+# Fallback threshold for any group not listed above
+blur_threshold_default: 80
+
+reject_no_flash: true
 
 # A frame is also rejected if flash did not fire (FlashMode contains "Did not fire")
 # regardless of sharpness score. See DECISIONS.md D005.

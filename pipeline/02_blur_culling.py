@@ -2,8 +2,14 @@
 02_blur_culling.py
 ──────────────────
 Scores every RAW file for sharpness using Laplacian variance on a fast
-half-size rawpy decode. Frames below the blur_threshold in config.yaml,
-or flagged NO_FLASH in the exif audit, are marked for rejection.
+half-size rawpy decode. Frames below the blur_threshold for their camera
+group (defined in config.yaml), or flagged NO_FLASH in the exif audit,
+are marked for rejection.
+
+Per-group thresholds are necessary because the Nikon D850 (45MP) produces
+much larger half-size decoded images than the Ricoh GR II, diluting the
+Laplacian variance score. A single global threshold is not comparable across
+sensors. See DECISIONS.md D009.
 
 Reads:  runs/{run_id}/exif_audit.csv
 Writes: runs/{run_id}/blur_scores.csv
@@ -62,30 +68,37 @@ def run(run_id: str):
         print("[ERROR] Run 01_exif_audit.py first.")
         sys.exit(1)
 
-    # Load audit to get anomaly flags
+    # Load per-group thresholds — fall back to default if group not listed
+    thresholds = config.get("blur_thresholds", {})
+    default_threshold = config.get("blur_threshold_default", config.get("blur_threshold", 80))
+    reject_no_flash = config["reject_no_flash"]
+
+    # Load audit to get anomaly flags — keyed by filename
     audit = {}
     with open(audit_path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             audit[row["filename"]] = row
 
-    blur_threshold = config["blur_threshold"]
-    reject_no_flash = config["reject_no_flash"]
+    # Collect RAW files only — explicitly exclude JPGs
+    RAW_EXTENSIONS = {".nef", ".dng"}
+    raw_files = sorted([
+        f for f in input_dir.iterdir()
+        if f.is_file() and f.suffix.lower() in RAW_EXTENSIONS
+    ])
+
+    print(f"[02] Scoring {len(raw_files)} RAW files")
+    print(f"[02] Thresholds: {thresholds} (default: {default_threshold})")
 
     results = []
-    raw_files = sorted(
-        list(input_dir.glob("*.NEF")) +
-        list(input_dir.glob("*.nef")) +
-        list(input_dir.glob("*.DNG")) +
-        list(input_dir.glob("*.dng"))
-    )
-
-    print(f"[02] Scoring {len(raw_files)} files (blur threshold: {blur_threshold})")
 
     for i, raw_path in enumerate(raw_files):
         filename = raw_path.name
         meta = audit.get(filename, {})
         anomalies = meta.get("anomalies", "")
         group = meta.get("group", "unknown")
+
+        # Get threshold for this group
+        threshold = thresholds.get(group, default_threshold)
 
         # Check no-flash flag from audit
         flash_ok = "NO_FLASH" not in anomalies
@@ -102,9 +115,9 @@ def run(run_id: str):
         if reject_no_flash and not flash_ok:
             decision = "reject"
             reason = "no_flash"
-        elif score < blur_threshold:
+        elif score < threshold:
             decision = "reject"
-            reason = f"blurry (score={score:.1f})"
+            reason = f"blurry (score={score:.1f}, threshold={threshold})"
         else:
             decision = "keep"
             reason = f"ok (score={score:.1f})"
@@ -113,6 +126,7 @@ def run(run_id: str):
             "filename":        filename,
             "group":           group,
             "laplacian_score": round(score, 2),
+            "threshold":       threshold,
             "flash_ok":        flash_ok,
             "decision":        decision,
             "reason":          reason,
@@ -123,21 +137,33 @@ def run(run_id: str):
 
     # Write results
     out_path = run_dir / "blur_scores.csv"
-    fieldnames = ["filename", "group", "laplacian_score", "flash_ok", "decision", "reason"]
+    fieldnames = ["filename", "group", "laplacian_score", "threshold",
+                  "flash_ok", "decision", "reason"]
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(results)
 
-    # Summary
+    # Summary per group
     kept = sum(1 for r in results if r["decision"] == "keep")
     rejected = len(results) - kept
     no_flash_rej = sum(1 for r in results if r["reason"] == "no_flash")
     blur_rej = rejected - no_flash_rej
 
+    by_group = {}
+    for r in results:
+        g = r["group"]
+        if g not in by_group:
+            by_group[g] = {"keep": 0, "reject": 0}
+        by_group[g][r["decision"]] += 1
+
     print(f"[02] Culling complete → {out_path}")
     print(f"[02] Kept     : {kept}/{len(results)}")
     print(f"[02] Rejected : {rejected} ({blur_rej} blurry, {no_flash_rej} no-flash)")
+    print(f"[02] By group :")
+    for g, counts in by_group.items():
+        t = thresholds.get(g, default_threshold)
+        print(f"[02]   {g}: {counts['keep']} kept, {counts['reject']} rejected (threshold={t})")
 
 
 if __name__ == "__main__":
