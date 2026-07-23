@@ -76,12 +76,14 @@ def run():
     with open(run_dir / "run_info.json", "w") as f:
         json.dump({"run_id": run_id, "input_dir": str(input_dir), "step": "01_exif_audit"}, f, indent=2)
 
-    # Collect RAW files only (not JPGs)
+    # Collect RAW files only (not JPGs), recursively — the NAS dataset is nested
+    # per card (e.g. d850\146ND850\, ricoh\100_0512\), while local dev samples are
+    # flat. rglob handles both. Filenames carry a unique card prefix (N02_/R004/
+    # R100/R105) so basenames don't collide across cards and stay valid dict keys.
+    RAW_EXTENSIONS = {".nef", ".dng"}
     raw_files = sorted(
-        list(input_dir.glob("*.NEF")) +
-        list(input_dir.glob("*.nef")) +
-        list(input_dir.glob("*.DNG")) +
-        list(input_dir.glob("*.dng"))
+        f for f in input_dir.rglob("*")
+        if f.is_file() and f.suffix.lower() in RAW_EXTENSIONS
     )
 
     if not raw_files:

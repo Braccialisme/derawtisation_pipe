@@ -69,6 +69,17 @@ checker_reference: "Classic"
 # "sRGB" is correct for JPEG output going into photogrammetry software.
 target_colorspace: "sRGB"
 
+# ── Scan performance / resumability (step 03) ──
+# Step 03 decodes every RAW at half-size to find the chart. On the full ~2500-file
+# dataset this is the slow part, so it runs in parallel and caches every file's
+# result to scan_cache.jsonl in the run folder. Re-running the SAME run_id resumes:
+# already-scanned files (matched on path+size+mtime) are skipped, so a crash or
+# network drop never loses progress.
+scan_workers: 8          # parallel decode+detect processes. Tune to your CPU;
+                         # 8 is safe on most machines (each worker holds one
+                         # decoded frame in RAM and is CPU-heavy).
+scan_progress_every: 50  # print a progress line every N files scanned
+
 
 # ── NORMALIZATION (step 04) ──────────────────────────────────────────────────
 # Turns the ColorChecker detections from step 03 into one color-correction

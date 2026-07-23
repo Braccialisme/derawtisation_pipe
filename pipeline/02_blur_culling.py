@@ -79,10 +79,11 @@ def run(run_id: str):
         for row in csv.DictReader(f):
             audit[row["filename"]] = row
 
-    # Collect RAW files only — explicitly exclude JPGs
+    # Collect RAW files only — explicitly exclude JPGs. Recursive (rglob) so this
+    # works on the nested NAS tree as well as a flat local sample; matches step 01.
     RAW_EXTENSIONS = {".nef", ".dng"}
     raw_files = sorted([
-        f for f in input_dir.iterdir()
+        f for f in input_dir.rglob("*")
         if f.is_file() and f.suffix.lower() in RAW_EXTENSIONS
     ])
 

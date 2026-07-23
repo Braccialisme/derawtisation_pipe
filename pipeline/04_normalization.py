@@ -60,6 +60,14 @@ except ImportError:
     print("[ERROR] colour-science not installed. Run: uv sync")
     sys.exit(1)
 
+# Force UTF-8 on stdout/stderr so status lines with ΔE / → / × don't crash on a
+# legacy Windows console codepage (cp1252) or when output is piped/redirected.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass  # already utf-8, or a stream that doesn't support reconfigure
+
 
 # ── Config / IO helpers (same pattern as the other pipeline steps) ───────────
 

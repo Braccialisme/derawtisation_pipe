@@ -19,6 +19,13 @@ import numpy as np
 import yaml
 import colour
 
+# Force UTF-8 so ΔE in the output doesn't crash a legacy Windows console codepage.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 SRGB = colour.models.RGB_COLOURSPACE_sRGB
 
 def load_config():
