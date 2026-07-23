@@ -130,6 +130,12 @@ normalization:
 # Going above 95 produces diminishing returns at significant file size cost.
 jpeg_quality: 95
 
+# Parallel RawTherapee-develop + correct workers for step 06 (the export batch).
+# Each worker runs one rawtherapee-cli process and holds one 16-bit TIFF in RAM,
+# so keep this lower than the step-03 scan workers. Re-running step 06 skips
+# frames whose JPEG already exists, so a killed batch resumes cheaply.
+render_workers: 6
+
 # Output color profile embedded in exported JPEGs.
 output_profile: "sRGB"
 

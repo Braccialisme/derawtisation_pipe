@@ -91,37 +91,76 @@ This file records every significant technical choice made in building this pipel
 
 ---
 
-## D011 — Full-dataset scan outcome + 3×3 CCM model choice
+## D011 — Full-dataset scan outcome + patch-scale bug + 3×3 CCM is enough
 
 **Date:** 2026-07-23
-**Decision:** Ship the pipeline on a per-group 3×3 linear CCM rendered through
-RawTherapee, accepting a ~ΔE 7 fit floor. Record what the full scan actually found.
+**Decision:** Ship on a per-group 3×3 linear CCM. Record what the full scan found
+and the scale bug it surfaced.
 
 **Full checker scan (all 1249 RAW files, run `20260723_123506`):**
 - **N02 (Nikon reference):** 3 detections found, 1 rejected by the D010 gate at
-  ΔE 26 (oblique/bad-geometry chart), 2 pooled → own matrix, mean ΔE 7.42.
-- **R105:** 2 detections, both used → own matrix, mean ΔE 7.60.
+  ΔE ~30 (oblique/bad-geometry chart), 2 pooled → own matrix, **mean ΔE 3.15,
+  trusted**.
+- **R105:** 2 detections, both used → own matrix, **mean ΔE 3.87, trusted**.
 - **R004 and R100:** **zero detections across the entire dataset** — the chart
   never swept into a detectable frame for these two cards. Both borrow R105
-  (Ricoh-borrows-Ricoh, per D010 fallback_order). This is a genuine data gap,
-  not a sampling artifact, and is the strongest argument for the re-shoot below.
+  (Ricoh-borrows-Ricoh, per D010 fallback_order). A genuine data gap, not a
+  sampling artifact, and the strongest argument for the re-shoot note below.
 
-**Why 3×3 and not a more accurate model:** the ~ΔE 7 residual on the usable
-groups is the *capacity limit of a linear 3×3 matrix* on a real sensor (worst
-patches are saturated blue, foliage, dark skin — no clipping), not a data-quality
-fault. A root-polynomial CCM (colour-science `Finlayson 2015`) would cut this to
-~ΔE 2–3, but a root-polynomial is not a 3×3 and cannot be expressed in
-RawTherapee's ChannelMixer — it would force a Python render and supersede D002.
-For the project goal (cross-camera *homogeneity* anchored to one shared chart
-reference, for photogrammetry texture — not lab-grade accuracy) the 3×3 is
-sufficient: the residual is systematic per group and consistent within it.
-**Deferred option:** if QC (step 07) shows visible cross-group blotching, switch
-to root-polynomial + Python render. Documented, not adopted.
+**Patch-scale bug (fixed this session):** step 04 originally divided the stored
+patch values by 65535, assuming 16-bit. But colour-checker-detection normalises
+its swatch output to 0..1 regardless of input depth, so step 03 already stores
+0..1. The stray divide crushed patches to ~1e-5 and fit a ~1e6 CCM to compensate.
+Because the fit stayed self-consistent, the residual still *looked* like a
+plausible ΔE ~7 — the bug was invisible in step 04's own numbers and was only
+caught by rendering a frame and seeing the colour blow out. After the fix the true
+3×3 residual is **ΔE ~3**, and both usable groups pass the trust gate. Lesson:
+never trust a fit residual alone — render and re-measure (see tools/verify_render.py).
 
-**Process note (reaffirms D010):** the clean fix for R004/R100 — and for the thin
-2-detection reference — is upstream: on the next museum visit shoot 2–3 dedicated
-ColorChecker frames per memory card. One or zero opportunistic detections per card
-is too thin to anchor a four-group normalization.
+**Why 3×3 is enough:** at ΔE ~3 (just-noticeable) the linear 3×3 comfortably meets
+the goal — cross-camera *homogeneity* anchored to one shared chart reference, for
+photogrammetry texture, not lab-grade accuracy. A root-polynomial CCM
+(`Finlayson 2015`) could reach ~ΔE 1–2 but is unnecessary here and would complicate
+the render. Not adopted.
+
+**Process note (reaffirms D010):** the clean fix for R004/R100 — and for anchoring
+on only 2 opportunistic Nikon frames — is upstream: on the next museum visit shoot
+2–3 dedicated ColorChecker frames per memory card. Zero or one opportunistic
+detection per card is too thin to anchor a four-group normalization.
+
+---
+
+## D012 — Hybrid render: RawTherapee develops, Python applies the CCM
+
+**Date:** 2026-07-23
+**Decision:** Steps 05/06 render final JPEGs in two stages — RawTherapee develops
+each RAW to a neutral 16-bit sRGB TIFF (demosaic, as-shot white balance, highlight
+handling), then Python applies the group's 3×3 linear CCM and writes the JPEG.
+
+**Reason:** the CCM is a colorimetric 3×3 fitted in linear sRGB (step 04).
+RawTherapee has **no module that applies an arbitrary colour matrix**. We tested
+its [Channel Mixer] thoroughly and it is a channel-blend / black-and-white tool,
+not a matrix multiply: pushed through it the CCM produced ΔE ~30 (worse than no
+correction), and a coefficient-scale probe on a neutral patch was non-monotonic —
+only the exact identity (100) behaved, every other value collapsed. So a CCM
+simply cannot be expressed as a RawTherapee ChannelMixer.
+
+Three render paths were on the table (all empirically checked on the 5 checker
+frames with tools/verify_render.py):
+- **RawTherapee ChannelMixer** — ΔE ~30. Rejected: structurally impossible.
+- **Pure Python (rawpy decode + CCM)** — ΔE ~3. Correct, but drops RawTherapee.
+- **Hybrid (chosen)** — RawTherapee develop → Python CCM — **ΔE ~2.6–4.3**, on par
+  with the fit residual. Keeps RawTherapee's superior demosaic/highlight/noise
+  handling (the spirit of D002) while applying the matrix in the exact linear
+  domain it was fitted in.
+
+The CCM already absorbs white balance (fitted on a camera-WB decode), so the
+develop profile uses `WhiteBalance=Camera` and the render does **not** apply the
+wb_multipliers separately — doing so would double-correct. This **supersedes the
+render half of D002**: RawTherapee stays, as a developer, not as the colour-matrix
+applier. The proper RawTherapee-native alternative (a per-group DCP/ICC camera
+profile via dcamprof) was considered and set aside as heavier tooling for no
+quality gain over the hybrid.
 
 ---
 

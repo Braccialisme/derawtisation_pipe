@@ -37,13 +37,13 @@ RAW files (NEF + DNG)
 [04] NORMALIZATION      → computes per-group correction matrices from checker data
         │
         ▼
-[05] PP3 GENERATION     → writes a RawTherapee sidecar (.pp3) per image
+[05] DEVELOP PROFILE    → writes the neutral RawTherapee profile + render manifest
         │
         ▼
-[06] RAW EXPORT         → calls RawTherapee CLI, outputs JPEGs
+[06] RAW EXPORT         → RawTherapee develops → Python applies the CCM → JPEGs
         │
         ▼
-[07] QC REPORT          → histogram checks, outlier detection, HTML report
+[07] QC REPORT          → per-group luminance/colour homogeneity, HTML report
 ```
 
 Each step produces a traceable output in the `runs/YYYYMMDD_HHMMSS/` folder.
@@ -96,15 +96,28 @@ Edit `config.yaml` to set your input folder and output folder, then run each ste
 
 ```bash
 uv run python pipeline/01_exif_audit.py
-uv run python pipeline/02_blur_culling.py
-uv run python pipeline/03_checker_detection.py
-uv run python pipeline/04_normalization.py
-uv run python pipeline/05_pp3_generation.py
-uv run python pipeline/06_raw_export.py
-uv run python pipeline/07_qc_report.py
+uv run python pipeline/02_blur_culling.py    <run_id>
+uv run python pipeline/03_checker_detection.py    [run_id]   # [run_id] resumes a scan
+uv run python pipeline/04_normalization.py    <run_id>
+uv run python pipeline/05_develop_profile.py    <run_id>
+uv run python pipeline/06_raw_export.py    <run_id>
+uv run python pipeline/07_qc_report.py    <run_id>
 ```
 
-Each script is independent and can be re-run individually. All outputs land in `runs/YYYYMMDD_HHMMSS/`.
+Step 01 creates the timestamped run folder and prints its `run_id`; every later
+step takes that `run_id`. Step 03 is the expensive full-dataset checker scan — it
+caches every file and **resumes** if re-run with the same `run_id`, so a crash or
+network drop never loses progress. Each script is independent and re-runnable.
+All outputs land in `runs/YYYYMMDD_HHMMSS/` (or the `output_dir` from config).
+
+**Render path (see DECISIONS.md D012):** the colour-correction matrix is a linear
+3×3, and RawTherapee has no module that applies an arbitrary colour matrix (its
+Channel Mixer is a B&W/blend tool). So step 06 is *hybrid*: RawTherapee develops
+each RAW to a neutral 16-bit TIFF, then Python applies the matrix. Validate it with:
+
+```bash
+uv run python tools/verify_render.py    <run_id>   # renders the checker frames, reports ΔE
+```
 
 ---
 

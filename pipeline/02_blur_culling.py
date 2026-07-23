@@ -27,6 +27,14 @@ import numpy as np
 import rawpy
 import yaml
 
+# Force UTF-8 on stdout/stderr so status lines don't crash a legacy Windows
+# console codepage (cp1252) or when output is piped/redirected.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 
 def load_config() -> dict:
     config_path = Path(__file__).parent.parent / "config.yaml"
