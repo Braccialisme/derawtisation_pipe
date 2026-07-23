@@ -9,15 +9,15 @@
 
 # Folder containing the RAW files to process (NEF and DNG)
 # Can be a local path or a mapped network drive path (e.g. H:\...)
-input_dir: "C:/Users/iconem/Desktop/mpr_sample2"
+input_dir: "C:/Users/iconem/Desktop/mpr_full_raw"
 
 # Where pipeline outputs (CSVs, correction matrices, exported JPEGs) will go
 # A timestamped subfolder is created automatically inside this folder per run
-output_dir: "C:/Users/iconem/Desktop/mpr_output2"
+output_dir: "C:/Users/iconem/Desktop/mpr_output_full"
 
 # Path to RawTherapee CLI executable
 # On Windows this is typically in Program Files
-rawtherapee_cli: "C:/Program Files/RawTherapee/rawtherapee-cli.exe"
+rawtherapee_cli: "C:/Program Files/RawTherapee/5.8/rawtherapee-cli.exe"
 
 
 # ── CAMERA GROUPS ────────────────────────────────────────────────────────────
@@ -75,9 +75,10 @@ target_colorspace: "sRGB"
 # result to scan_cache.jsonl in the run folder. Re-running the SAME run_id resumes:
 # already-scanned files (matched on path+size+mtime) are skipped, so a crash or
 # network drop never loses progress.
-scan_workers: 8          # parallel decode+detect processes. Tune to your CPU;
+scan_workers: 12         # parallel decode+detect processes. Tune to your CPU;
                          # 8 is safe on most machines (each worker holds one
-                         # decoded frame in RAM and is CPU-heavy).
+                         # decoded frame in RAM and is CPU-heavy). 12 suits the
+                         # full local scan on a many-core box + fast local disk.
 scan_progress_every: 50  # print a progress line every N files scanned
 
 
