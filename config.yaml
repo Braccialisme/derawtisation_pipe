@@ -46,13 +46,9 @@ blur_thresholds:
   R004: 80
   R100: 80
   R105: 80
-blur_threshold_default: 80
-reject_no_flash: true
 
 # Fallback threshold for any group not listed above
 blur_threshold_default: 80
-
-reject_no_flash: true
 
 # A frame is also rejected if flash did not fire (FlashMode contains "Did not fire")
 # regardless of sharpness score. See DECISIONS.md D005.
@@ -72,6 +68,48 @@ checker_reference: "Classic"
 # Color space used as the common target for normalization.
 # "sRGB" is correct for JPEG output going into photogrammetry software.
 target_colorspace: "sRGB"
+
+
+# ── NORMALIZATION (step 04) ──────────────────────────────────────────────────
+# Turns the ColorChecker detections from step 03 into one color-correction
+# matrix (CCM) + white-balance multipliers per camera group.
+normalization:
+
+  # Which ColorChecker standard the reference patch values come from.
+  # colour-science ships several. The Calibrite ColorChecker Passport uses the
+  # post-November-2014 values, so that is the correct reference for this shoot.
+  # (config.yaml's checker_reference: "Classic" is the human label; this is the
+  # exact colour-science key it maps to.)
+  checker_standard: "ColorChecker24 - After November 2014"
+
+  # Patch indices (0-based, standard ColorChecker order) used to derive white
+  # balance. The bottom row is the neutral grey ramp:
+  #   18=white (clips easily), 19=N8, 20=N6.5, 21=N5, 22=N3.5, 23=black (noisy).
+  # We use the three middle-light greys — bright enough to be clean, not clipped.
+  wb_neutral_indices: [19, 20, 21]
+
+  # Trust gates on the fit quality, measured as mean ΔE2000 across the 24 patches
+  # AFTER applying the computed CCM. This is the real quality signal — step 03's
+  # "confidence" only means "found 24 patches", not "the colors are clean".
+  #   mean ΔE <= warn            -> trusted
+  #   warn < mean ΔE <= reject   -> used, but flagged low_confidence (eyeball it)
+  #   mean ΔE > reject           -> detection thrown out (likely glare / shadow /
+  #                                 wrong orientation); group falls back to borrow.
+  residual_deltaE_warn: 5.0
+  residual_deltaE_reject: 10.0
+
+  # Borrow hierarchy — see DECISIONS.md D010.
+  # If a group has NO usable detection, it inherits the CCM of the first group
+  # in its list that DOES have a trusted matrix. Order encodes physical similarity:
+  # the 3 Ricoh bodies share the same sensor + native flash, so they borrow each
+  # other first; Nikon (different Godox flash) is only a last resort.
+  # Nikon borrowing a Ricoh is an EMERGENCY — the reference group having no checker
+  # undermines the whole normalization and should trigger a re-shoot, not a silent fix.
+  fallback_order:
+    N02:  ["R100", "R004", "R105"]
+    R004: ["R100", "R105", "N02"]
+    R100: ["R004", "R105", "N02"]
+    R105: ["R004", "R100", "N02"]
 
 
 # ── RAW EXPORT ───────────────────────────────────────────────────────────────

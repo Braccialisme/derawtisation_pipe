@@ -74,4 +74,21 @@ This file records every significant technical choice made in building this pipel
 **Decision:** Use separate Laplacian variance thresholds per camera group rather than one global value.  
 **Reason:** The Nikon D850 (45MP) produces much larger half-size decoded images than the Ricoh GR II. Laplacian variance is diluted across more pixels, producing systematically lower scores for the same perceived sharpness. A single threshold of 80 would reject most valid Nikon frames. Thresholds were calibrated empirically on mpr_sample2.
 
+---
+
+## D010 — Trust gate and fallback hierarchy for sparse ColorChecker detections
+
+**Date:** 2026-06  
+**Decision:** How step 04 decides whether to trust a group's own ColorChecker detection(s), and what a group does when it has none.
+
+1. **Trust is measured by fit residual, not by step 03's "confidence".** Step 03's confidence only reports whether 24 patches were found — it says nothing about glare, shadow, or a mis-oriented chart. So step 04 fits the CCM, re-measures the patches, and computes the mean ΔE2000 against the reference. Gates (in `config.yaml > normalization`): mean ΔE ≤ `residual_deltaE_warn` (5.0) → *trusted*; between warn and `residual_deltaE_reject` (10.0) → *low_confidence* (used, but flagged for a human to eyeball); above reject → the detection is thrown out. A scrambled/oblique chart lands around ΔE 28–30, so this gate reliably catches bad detections.
+2. **Multiple detections are pooled, not averaged as matrices.** Each detection is individually screened against the reject gate; the survivors' patches are stacked and one CCM is fitted on the combined set. Pooling averages out per-frame noise and is more stable than averaging independently-fitted matrices.
+3. **A single surviving detection is trusted but flagged `thin`.** One detection is one sample of one geometry under one flash pop; it is used, but surfaced in QC so a human knows the group rests on thin evidence.
+4. **Groups with no usable detection borrow a CCM**, following an explicit per-group `fallback_order` in config. The order encodes physical similarity: the three Ricoh bodies share a sensor and the native flash, so they borrow each other first; the Nikon group (different Godox flash) is only a last resort for them. **Nikon borrowing a Ricoh is an emergency** and is logged loudly — the reference group having no checker undermines the whole normalization, so it should trigger a re-shoot rather than a silent borrow. A group with no detection and no available donor is marked `failed`.
+5. **The correction target is the absolute ColorChecker reference, not a relative transform to Nikon.** Because every group is mapped to the same chart reference, all groups converge to a consistent (and colorimetrically accurate) result. "Normalize toward N02" (D004) is therefore the *fallback anchor* role, not a separate maths path — N02 matters as the most-trusted source to borrow from, not as a per-pixel target.
+
+**Reason:** The checker was only swept into frame opportunistically, so detection counts per group are uneven and some groups may have one or zero. We need a rule that (a) refuses to trust a bad detection just because it exists, (b) degrades gracefully toward the most physically similar group, and (c) makes the weak spots visible rather than hiding them. **Process note:** the cleanest fix is upstream — on the next museum visit, shoot 2–3 dedicated ColorChecker frames per memory card (especially for the Nikon reference group) so borrowing is never required. This is not overkill; one detection for the reference group is too thin to anchor four groups on.
+
+---
+
 *Add new entries below as decisions are made. Format: D00N — short title, date, decision, reason.*
