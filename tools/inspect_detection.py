@@ -63,7 +63,11 @@ def main():
         if pv is None or np.asarray(pv).shape != (24, 3):
             print(f"\n{d['filename']} ({d['group']}): no usable 24-patch data"); continue
         raw = np.asarray(pv, float)
-        meas = colour.cctf_decoding(np.clip(raw / 65535.0, 0, 1))
+        # step 03 stores swatches already normalised to 0..1 (see 04's
+        # linearize_patches); guard against a legacy 16-bit scale just in case.
+        if raw.max() > 1.0:
+            raw = raw / 65535.0
+        meas = colour.cctf_decoding(np.clip(raw, 0, 1))
         ccm, *_ = np.linalg.lstsq(meas, ref, rcond=None)
         dE = colour.delta_E(lin_to_lab(meas @ ccm), lin_to_lab(ref), method="CIE 2000")
         clip = (raw >= 65000).any(axis=1)          # any channel essentially blown

@@ -91,4 +91,38 @@ This file records every significant technical choice made in building this pipel
 
 ---
 
+## D011 — Full-dataset scan outcome + 3×3 CCM model choice
+
+**Date:** 2026-07-23
+**Decision:** Ship the pipeline on a per-group 3×3 linear CCM rendered through
+RawTherapee, accepting a ~ΔE 7 fit floor. Record what the full scan actually found.
+
+**Full checker scan (all 1249 RAW files, run `20260723_123506`):**
+- **N02 (Nikon reference):** 3 detections found, 1 rejected by the D010 gate at
+  ΔE 26 (oblique/bad-geometry chart), 2 pooled → own matrix, mean ΔE 7.42.
+- **R105:** 2 detections, both used → own matrix, mean ΔE 7.60.
+- **R004 and R100:** **zero detections across the entire dataset** — the chart
+  never swept into a detectable frame for these two cards. Both borrow R105
+  (Ricoh-borrows-Ricoh, per D010 fallback_order). This is a genuine data gap,
+  not a sampling artifact, and is the strongest argument for the re-shoot below.
+
+**Why 3×3 and not a more accurate model:** the ~ΔE 7 residual on the usable
+groups is the *capacity limit of a linear 3×3 matrix* on a real sensor (worst
+patches are saturated blue, foliage, dark skin — no clipping), not a data-quality
+fault. A root-polynomial CCM (colour-science `Finlayson 2015`) would cut this to
+~ΔE 2–3, but a root-polynomial is not a 3×3 and cannot be expressed in
+RawTherapee's ChannelMixer — it would force a Python render and supersede D002.
+For the project goal (cross-camera *homogeneity* anchored to one shared chart
+reference, for photogrammetry texture — not lab-grade accuracy) the 3×3 is
+sufficient: the residual is systematic per group and consistent within it.
+**Deferred option:** if QC (step 07) shows visible cross-group blotching, switch
+to root-polynomial + Python render. Documented, not adopted.
+
+**Process note (reaffirms D010):** the clean fix for R004/R100 — and for the thin
+2-detection reference — is upstream: on the next museum visit shoot 2–3 dedicated
+ColorChecker frames per memory card. One or zero opportunistic detections per card
+is too thin to anchor a four-group normalization.
+
+---
+
 *Add new entries below as decisions are made. Format: D00N — short title, date, decision, reason.*

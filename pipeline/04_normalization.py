@@ -131,11 +131,17 @@ def linearize_patches(patch_values) -> np.ndarray:
     """
     Convert one detection's 24 patch values into linear sRGB (0..1).
 
-    Step 03 stored these from a decode with the default sRGB gamma applied at
-    16-bit depth (0..65535). So to get back to linear light we normalise to
-    0..1 and undo the sRGB transfer function. Skipping this step is the classic
-    silent bug: the CCM would be fitted in the wrong domain and the colours
-    would come out subtly wrong everywhere.
+    Step 03 decodes with rawpy's default sRGB gamma, but colour-checker-detection
+    ALWAYS normalises its swatch output to the 0..1 range regardless of the input
+    bit depth — so what step 03 stores in checker_detections.json is already
+    0..1, sRGB-gamma-encoded. We only need to undo the sRGB transfer function to
+    reach linear light; a CCM must be fitted in linear.
+
+    (Guard: if a file ever carries raw 0..65535 values instead — a different
+    decode path — normalise it first. Getting this scale wrong is the classic
+    silent bug: the fit stays self-consistent so the residual ΔE still looks
+    reasonable, but the resulting matrix is off by orders of magnitude and is
+    unusable in any renderer.)
 
     Returns shape (24, 3), or None if the detection is unusable.
     """
@@ -144,7 +150,9 @@ def linearize_patches(patch_values) -> np.ndarray:
     arr = np.asarray(patch_values, dtype=float)
     if arr.shape != (24, 3):
         return None
-    arr = np.clip(arr / 65535.0, 0.0, 1.0)
+    if arr.max() > 1.0:                               # legacy 16-bit scale guard
+        arr = arr / 65535.0
+    arr = np.clip(arr, 0.0, 1.0)
     return colour.cctf_decoding(arr)                  # sRGB gamma -> linear
 
 
