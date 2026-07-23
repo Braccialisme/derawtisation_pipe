@@ -61,7 +61,18 @@ Correction matrices are computed **per card**, not per camera model, because the
 | `R100`      | Ricoh GR II | 104RICOH     | Auto         |
 | `R105`      | Ricoh GR II | 111RICOH     | Multi-P Auto |
 
-Group is detected from filename prefix, which maps 1:1 to card of origin.
+Group is detected from filename prefix, which maps 1:1 to card of origin. The
+exported JPEGs **keep the original filename**, so the prefix always tells you which
+camera a frame came from: `N02_*.jpg` is the Nikon, `R004*` / `R100*` / `R105*` are
+the three Ricoh cards.
+
+---
+
+## Detailed step guide
+
+New to the pipeline? **[`docs/pipeline_steps.md`](docs/pipeline_steps.md)** walks
+through every step in plain language — what it does, what it reads/writes, and
+which `config.yaml` knob to turn. `docs/ideas.md` tracks planned improvements.
 
 ---
 
@@ -126,15 +137,32 @@ uv run python tools/verify_render.py    <run_id>   # renders the checker frames,
 ```
 derawtisation_pipe/
 ├── README.md               this file
-├── DECISIONS.md            technical decisions log
+├── DECISIONS.md            technical decisions log (D001–D012)
 ├── config.yaml             all tunable parameters
 ├── pyproject.toml          uv environment definition
-├── pipeline/               numbered processing scripts
+├── pipeline/
+│   ├── 01_exif_audit.py … 07_qc_report.py   numbered steps, run in order
+│   ├── pp3_common.py       shared RawTherapee develop-profile builder
+│   └── render_common.py    shared hybrid render core (RT develop + Python CCM)
+├── tools/
+│   ├── verify_render.py    renders the checker frames, reports ΔE (render proof)
+│   └── inspect_detection.py  per-patch colour-error breakdown for a group
+├── docs/
+│   ├── pipeline_steps.md   plain-language guide to every step
+│   ├── ideas.md            planned improvements
+│   ├── color_correction.md · rawtherapee_notes.md
 ├── runs/                   gitignored — one folder per run
-├── docs/                   extended technical documentation
 ├── tests/                  unit tests
 └── samples/                small test files for onboarding
 ```
+
+## Tuning
+
+Everything adjustable lives in `config.yaml` (commented). The ones you'll actually
+touch: `blur_thresholds` (per group — lower to keep more frames),
+`checker_confidence_min`, `normalization.residual_deltaE_warn/_reject` (colour
+trust gates), `jpeg_quality`, and the `scan_workers` / `render_workers` parallelism.
+No values are hard-coded in the scripts.
 
 ---
 

@@ -42,3 +42,6 @@ desktop.ini
 # Secrets / local config overrides
 .env
 local_config.yaml
+
+# Local project brief — keep out of the public repo
+Claude_brief_derawtisation_pipe.md
