@@ -55,6 +55,13 @@ def apply_ccm_to_tiff(tif_path, ccm) -> np.ndarray:
 
 
 def write_jpeg(rgb_uint8: np.ndarray, dest_path, quality: int = 95) -> None:
-    """Write an RGB uint8 array to JPEG at the given quality."""
+    """
+    Write an RGB uint8 array to JPEG. Uses 4:4:4 chroma (no colour subsampling) —
+    this is a colour-accuracy pipeline, so we don't want the encoder throwing away
+    half the colour resolution the way default 4:2:0 does.
+    """
     bgr = cv2.cvtColor(rgb_uint8, cv2.COLOR_RGB2BGR)
-    cv2.imwrite(str(dest_path), bgr, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    cv2.imwrite(str(dest_path), bgr, [
+        int(cv2.IMWRITE_JPEG_QUALITY), quality,
+        int(cv2.IMWRITE_JPEG_SAMPLING_FACTOR), int(cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444),
+    ])

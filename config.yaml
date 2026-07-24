@@ -126,9 +126,11 @@ normalization:
 
 # ── RAW EXPORT ───────────────────────────────────────────────────────────────
 
-# JPEG quality for exported files. 95 is the standard for photogrammetry input.
-# Going above 95 produces diminishing returns at significant file size cost.
-jpeg_quality: 95
+# JPEG quality for exported files. 100 = least-aggressive JPEG (largest files).
+# Combined with 4:4:4 chroma (no colour subsampling, set in render_common) this
+# keeps the export as close to lossless as JPEG allows — good for a colour pipeline.
+# 95 is the usual photogrammetry standard if you want smaller files.
+jpeg_quality: 100
 
 # Parallel RawTherapee-develop + correct workers for step 06 (the export batch).
 # Each worker runs one rawtherapee-cli process and holds one 16-bit TIFF in RAM,
