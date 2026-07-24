@@ -73,6 +73,8 @@ the three Ricoh cards.
 A local web GUI wraps the whole pipeline — edit config, run steps with live console
 output, and browse runs — no terminal needed once it's up:
 
+![derawtisation_pipe GUI](assets/gui_screenshot.png)
+
 ```bash
 uv run python gui/server.py
 ```
