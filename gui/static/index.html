@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>derawtisation_pipe</title>
+
+<!-- Tailwind Play CDN: JIT in the browser, no build step. -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: { extend: { colors: {
+      background: "hsl(var(--background))", foreground: "hsl(var(--foreground))",
+      card: "hsl(var(--card))", "card-foreground": "hsl(var(--card-foreground))",
+      popover: "hsl(var(--popover))",
+      primary: "hsl(var(--primary))", "primary-foreground": "hsl(var(--primary-foreground))",
+      secondary: "hsl(var(--secondary))", "secondary-foreground": "hsl(var(--secondary-foreground))",
+      muted: "hsl(var(--muted))", "muted-foreground": "hsl(var(--muted-foreground))",
+      accent: "hsl(var(--accent))", "accent-foreground": "hsl(var(--accent-foreground))",
+      destructive: "hsl(var(--destructive))",
+      border: "hsl(var(--border))", input: "hsl(var(--input))", ring: "hsl(var(--ring))",
+    }, borderRadius: { lg: "var(--radius)", md: "calc(var(--radius) - 2px)", sm: "calc(var(--radius) - 4px)" } } },
+  };
+</script>
+
+<!--
+  THEME — shadcn design tokens as CSS variables.
+  To reskin: paste a theme exported from https://tweakcn.com over the :root / .dark
+  blocks below (tweakcn emits exactly these variable names). Nothing else changes.
+-->
+<style>
+  :root {
+    --background: 0 0% 100%; --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%; --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --primary: 240 5.9% 10%; --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%; --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%; --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%; --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 72% 51%;
+    --border: 240 5.9% 90%; --input: 240 5.9% 90%; --ring: 240 5% 65%;
+    --radius: 0.6rem;
+  }
+  .dark {
+    --background: 240 10% 3.9%; --foreground: 0 0% 98%;
+    --card: 240 10% 5.5%; --card-foreground: 0 0% 98%;
+    --popover: 240 10% 5.5%;
+    --primary: 0 0% 98%; --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%; --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%; --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 17%; --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 50%;
+    --border: 240 3.7% 15.9%; --input: 240 3.7% 15.9%; --ring: 240 4.9% 60%;
+    --radius: 0.6rem;
+  }
+  html, body { background: hsl(var(--background)); color: hsl(var(--foreground)); }
+  /* console log look */
+  .log { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="module">
+import React from "https://esm.sh/react@18.3.1";
+import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
+import htm from "https://esm.sh/htm@3.1.1";
+const html = htm.bind(React.createElement);
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── tiny shadcn-styled primitives ──────────────────────────────────────────
+const cn = (...c) => c.filter(Boolean).join(" ");
+
+const Button = ({ variant = "default", className, ...p }) => {
+  const styles = {
+    default: "bg-primary text-primary-foreground hover:opacity-90",
+    secondary: "bg-secondary text-secondary-foreground hover:bg-accent",
+    outline: "border border-input bg-transparent hover:bg-accent",
+    ghost: "hover:bg-accent",
+  }[variant];
+  return html`<button className=${cn(
+    "inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium h-9 px-4 transition disabled:opacity-40 disabled:pointer-events-none",
+    styles, className)} ...${p} />`;
+};
+
+const Card = ({ className, ...p }) => html`<div className=${cn(
+  "rounded-lg border border-border bg-card text-card-foreground shadow-sm", className)} ...${p} />`;
+
+const Badge = ({ tone = "muted", children }) => {
+  const t = { muted: "bg-muted text-muted-foreground", ok: "bg-primary text-primary-foreground",
+              warn: "bg-destructive text-white" }[tone];
+  return html`<span className=${cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", t)}>${children}</span>`;
+};
+
+const Switch = ({ checked, onChange }) => html`
+  <button role="switch" aria-checked=${checked} onClick=${() => onChange(!checked)}
+    className=${cn("relative inline-flex h-6 w-11 items-center rounded-full transition",
+      checked ? "bg-primary" : "bg-input")}>
+    <span className=${cn("inline-block h-5 w-5 transform rounded-full bg-background transition",
+      checked ? "translate-x-5" : "translate-x-0.5")}></span>
+  </button>`;
+
+// ── one config control, chosen by field.type ───────────────────────────────
+function Control({ field, value, onChange }) {
+  const t = field.type;
+  const base = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
+  if (t === "bool")
+    return html`<${Switch} checked=${!!value} onChange=${onChange} />`;
+  if (t === "select")
+    return html`<select className=${base} value=${value ?? ""} onChange=${e => onChange(e.target.value)}>
+      ${(field.options || []).map(o => html`<option key=${o} value=${o}>${o}</option>`)}
+    </select>`;
+  if (t === "int" || t === "number") {
+    const hasRange = field.min != null && field.max != null;
+    return html`<div className="flex items-center gap-3">
+      ${hasRange && html`<input type="range" className="flex-1 accent-primary"
+        min=${field.min} max=${field.max} step=${field.step ?? 1}
+        value=${value ?? field.min} onChange=${e => onChange(Number(e.target.value))} />`}
+      <input type="number" className=${cn(base, "w-28")}
+        min=${field.min} max=${field.max} step=${field.step ?? 1}
+        value=${value ?? ""} onChange=${e => onChange(Number(e.target.value))} />
+    </div>`;
+  }
+  // path / text
+  return html`<input className=${base} value=${value ?? ""}
+    onChange=${e => onChange(e.target.value)} />`;
+}
+
+// ── Config panel (schema-driven) ────────────────────────────────────────────
+function ConfigPanel({ schema }) {
+  const [values, setValues] = useState({});
+  const [dirty, setDirty] = useState({});
+  const [status, setStatus] = useState("");
+  useEffect(() => { fetch("/api/config").then(r => r.json()).then(setValues); }, []);
+  const set = (k, v) => { setValues(s => ({ ...s, [k]: v })); setDirty(d => ({ ...d, [k]: true })); };
+  const save = async () => {
+    const updates = Object.fromEntries(Object.keys(dirty).map(k => [k, values[k]]));
+    setStatus("saving…");
+    const r = await fetch("/api/config", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updates }) });
+    setStatus(r.ok ? "saved ✓" : "error"); setDirty({});
+    setTimeout(() => setStatus(""), 2500);
+  };
+  const groups = schema.group_order.filter(g => schema.fields.some(f => f.group === g));
+  const nDirty = Object.keys(dirty).length;
+  return html`<div className="space-y-5">
+    ${groups.map(g => html`<${Card} key=${g} className="p-5">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">${g}</h3>
+      <div className="space-y-4">
+        ${schema.fields.filter(f => f.group === g).map(f => html`
+          <div key=${f.key} className="grid grid-cols-1 md:grid-cols-[minmax(0,18rem)_1fr] gap-2 md:gap-6 md:items-center">
+            <div>
+              <div className="text-sm font-medium">${f.label}</div>
+              ${f.help && html`<div className="text-xs text-muted-foreground mt-0.5">${f.help}</div>`}
+            </div>
+            <${Control} field=${f} value=${values[f.key]} onChange=${v => set(f.key, v)} />
+          </div>`)}
+      </div>
+    <//>`)}
+    <div className="sticky bottom-4 flex items-center gap-3">
+      <${Button} onClick=${save} disabled=${nDirty === 0}>Save${nDirty ? ` (${nDirty})` : ""}<//>
+      <span className="text-sm text-muted-foreground">${status}</span>
+    </div>
+  </div>`;
+}
+
+// ── Run panel (step buttons + live console via SSE) ─────────────────────────
+function RunPanel({ schema, runId, setRunId }) {
+  const [lines, setLines] = useState([]);
+  const [running, setRunning] = useState(null);
+  const boxRef = useRef(null);
+  const esRef = useRef(null);
+  useEffect(() => { if (boxRef.current) boxRef.current.scrollTop = boxRef.current.scrollHeight; }, [lines]);
+  const run = (step) => {
+    if (esRef.current) esRef.current.close();
+    setLines([]); setRunning(step.id);
+    const url = `/api/run/${step.id}` + (runId ? `?run_id=${encodeURIComponent(runId)}` : "");
+    const es = new EventSource(url); esRef.current = es;
+    es.onmessage = (e) => setLines(l => [...l, e.data]);
+    es.addEventListener("done", (e) => { setLines(l => [...l, "— " + e.data + " —"]); setRunning(null); es.close(); });
+    es.onerror = () => { setRunning(null); es.close(); };
+  };
+  return html`<div className="grid grid-cols-1 lg:grid-cols-[22rem_1fr] gap-5">
+    <${Card} className="p-5 space-y-3">
+      <div>
+        <label className="text-sm font-medium">Run ID</label>
+        <input className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-mono"
+          placeholder="from step 01 (blank = latest / new scan)"
+          value=${runId} onChange=${e => setRunId(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        ${schema.steps.map(s => html`<div key=${s.id}
+          className="flex items-center justify-between gap-3 rounded-md border border-border p-2.5">
+          <div className="min-w-0">
+            <div className="text-sm font-medium truncate">${s.name}</div>
+            <div className="text-xs text-muted-foreground truncate">${s.desc}</div>
+          </div>
+          <${Button} variant="secondary" className="shrink-0 h-8 px-3"
+            disabled=${running !== null} onClick=${() => run(s)}>
+            ${running === s.id ? "running…" : "Run"}<//>
+        </div>`)}
+      </div>
+    <//>
+    <${Card} className="p-0 overflow-hidden">
+      <div className="px-4 py-2 border-b border-border text-xs uppercase tracking-wide text-muted-foreground">Console</div>
+      <div ref=${boxRef} className="log text-xs p-4 h-[70vh] overflow-auto whitespace-pre-wrap leading-relaxed">
+        ${lines.length === 0
+          ? html`<span className="text-muted-foreground">Pick a step to run. Output streams here live.</span>`
+          : lines.map((l, i) => html`<div key=${i}>${l}</div>`)}
+      </div>
+    <//>
+  </div>`;
+}
+
+// ── Runs panel (browse run folders) ─────────────────────────────────────────
+function RunsPanel({ schema, setRunId, goRun }) {
+  const [data, setData] = useState({ runs: [], output_dir: "" });
+  useEffect(() => { fetch("/api/runs").then(r => r.json()).then(setData); }, []);
+  const stepIds = schema.steps.map(s => s.id);
+  return html`<${Card} className="p-5">
+    <div className="text-xs text-muted-foreground mb-3">Output: <span className="font-mono">${data.output_dir}</span></div>
+    <div className="space-y-2">
+      ${data.runs.length === 0 && html`<div className="text-sm text-muted-foreground">No runs yet.</div>`}
+      ${data.runs.map(r => html`<div key=${r.run_id}
+        className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+        <div className="font-mono text-sm">${r.run_id}</div>
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          ${stepIds.map(id => html`<${Badge} key=${id} tone=${r.steps_done.includes(id) ? "ok" : "muted"}>${id}<//>`)}
+          ${r.n_jpeg > 0 && html`<${Badge} tone="muted">${r.n_jpeg} jpg<//>`}
+          <${Button} variant="outline" className="h-7 px-2 text-xs"
+            onClick=${() => { setRunId(r.run_id); goRun(); }}>Use<//>
+        </div>
+      </div>`)}
+    </div>
+  <//>`;
+}
+
+// ── App shell ────────────────────────────────────────────────────────────────
+function App() {
+  const [schema, setSchema] = useState(null);
+  const [tab, setTab] = useState("config");
+  const [runId, setRunId] = useState("");
+  const [dark, setDark] = useState(true);
+  useEffect(() => { fetch("/api/schema").then(r => r.json()).then(setSchema); }, []);
+  useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
+  if (!schema) return html`<div className="p-10 text-muted-foreground">loading…</div>`;
+  const tabs = [["config", "Config"], ["run", "Run"], ["runs", "Runs"]];
+  return html`<div className="min-h-screen">
+    <header className="border-b border-border sticky top-0 z-10 backdrop-blur bg-background/80">
+      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-6 w-6 rounded bg-primary"></div>
+          <span className="font-semibold">derawtisation_pipe</span>
+          <span className="text-xs text-muted-foreground hidden sm:inline">colour-normalization pipeline</span>
+        </div>
+        <div className="flex items-center gap-1">
+          ${tabs.map(([id, label]) => html`<${Button} key=${id}
+            variant=${tab === id ? "secondary" : "ghost"} className="h-8 px-3"
+            onClick=${() => setTab(id)}>${label}<//>`)}
+          <${Button} variant="ghost" className="h-8 px-3" onClick=${() => setDark(d => !d)}>
+            ${dark ? "☾" : "☀"}<//>
+        </div>
+      </div>
+    </header>
+    <main className="max-w-6xl mx-auto px-6 py-8">
+      ${tab === "config" && html`<${ConfigPanel} schema=${schema} />`}
+      ${tab === "run" && html`<${RunPanel} schema=${schema} runId=${runId} setRunId=${setRunId} />`}
+      ${tab === "runs" && html`<${RunsPanel} schema=${schema} setRunId=${setRunId} goRun=${() => setTab("run")} />`}
+    </main>
+  </div>`;
+}
+
+createRoot(document.getElementById("root")).render(html`<${App} />`);
+</script>
+</body>
+</html>

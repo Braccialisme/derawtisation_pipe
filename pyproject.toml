@@ -11,29 +11,25 @@ requires-python = ">=3.11"
 dependencies = [
     # RAW file decoding (NEF and DNG) → numpy arrays
     "rawpy>=0.21",
-
     # Computer vision — blur scoring, image analysis
     "opencv-python>=4.9",
-
     # Color science — ColorChecker detection and color correction matrices
     "colour-science>=0.4",
     "colour-checker-detection>=0.1",
-
     # Numerical computing
     "numpy>=1.26",
-
     # Data handling — audit CSVs, correction matrix storage
     "pandas>=2.2",
-
     # EXIF metadata reading
     "pyexiftool>=0.5",
-
     # Config file parsing
     "pyyaml>=6.0",
-
     # QC report generation
     "jinja2>=3.1",
     "matplotlib>=3.8",
+    "fastapi>=0.139.2",
+    "uvicorn[standard]>=0.51.0",
+    "ruamel-yaml>=0.19.1",
 ]
 
 

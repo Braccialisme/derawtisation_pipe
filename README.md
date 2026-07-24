@@ -68,6 +68,24 @@ the three Ricoh cards.
 
 ---
 
+## GUI (optional)
+
+A local web GUI wraps the whole pipeline — edit config, run steps with live console
+output, and browse runs — no terminal needed once it's up:
+
+```bash
+uv run python gui/server.py
+```
+
+Then open **http://127.0.0.1:8756**. It's local-only (nothing exposed off your
+machine) and drives the same scripts. The look is themeable: paste a theme from
+[tweakcn](https://tweakcn.com/) over the CSS variables in `gui/static/index.html`.
+Every control is generated from a single schema (`gui/schema.py`) — adding a knob
+is one line there. A browser is required because the page needs the local server
+to reach RawTherapee and your files; a bare static page can't do that.
+
+---
+
 ## Detailed step guide
 
 New to the pipeline? **[`docs/pipeline_steps.md`](docs/pipeline_steps.md)** walks
